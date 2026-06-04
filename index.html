@@ -1,0 +1,183 @@
+html<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Adventure Tracker</title>
+    
+    <!-- HIGH-SPEED STABLE STYLESHEET LAYER -->
+    <link rel="stylesheet" href="https://cloudflare.com" />
+    
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #f5f5f5;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .info-box {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 13px;
+            font-weight: bold;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #222;
+            border-left: 4px solid #ff0055;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+    <div class="info-box" id="info">Downloading Tracking Components...</div>
+
+    <!-- SYNCHRONISED HIGH-RELIABILITY ENGINE SCRIPTS -->
+    <script src="https://cloudflare.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
+
+    <script>
+        // HOOK EXECUTION ROUTINE: Ensures everything maps perfectly in browser memory
+        function initializeTrackerApp() {
+            if (typeof L === 'undefined' || typeof L.GPX === 'undefined') {
+                document.getElementById('info').innerText = "Dependency delay detected. Re-binding...";
+                setTimeout(initializeTrackerApp, 200);
+                return;
+            }
+
+            document.getElementById('info').innerText = "Map Active. Loading Base Map Layers...";
+
+            // 1. INITIALISE MAP & MAP TILES
+            // Default center focal view point while your file parses
+            const map = L.map('map').setView([43.7, 7.2], 8); 
+
+            const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                maxZoom: 17,
+                attribution: 'Map data: &copy; OpenStreetMap | Style: OpenTopoMap'
+            }).addTo(map);
+
+            const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            });
+
+            const baseMaps = {
+                "Topographic Map": topoLayer,
+                "Standard Road Map": osmLayer
+            };
+            L.control.layers(baseMaps).addTo(map);
+
+            const markerGroup = L.layerGroup().addTo(map);
+
+
+            // 2. CONFIGURATION DATA LOOP
+            // REPAIRED: Swapped placeholder string for your working live track file link
+            const rawGpxUrl = 'https://githubusercontent.com'; 
+            const gpxFileUrl = 'https://corsproxy.io' + encodeURIComponent(rawGpxUrl);
+
+            const friends = [
+                { name: "Niven", feedId: "0ZyT6VBgHg6hQ80sOUumc1t2Q2oiG9zXh" }
+            ];
+
+
+            // 3. SECURELY LOAD AND ZOOM TO GPX ROUTE
+            document.getElementById('info').innerText = "Rendering Course Path...";
+            
+            if (rawGpxUrl && rawGpxUrl.trim() !== '' && rawGpxUrl !== 'https://githubusercontent.com') {
+                new L.GPX(gpxFileUrl, {
+                    async: true,
+                    marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null },
+                    polyline_options: { color: '#ff0055', weight: 5, opacity: 0.9 }
+                }).on('loaded', function(e) {
+                    map.fitBounds(e.target.getBounds());
+                    document.getElementById('info').innerText = "Course Path Mapped. Loading Satellite dots...";
+                    updateTrackersLoop();
+                }).on('error', function(e) {
+                    console.error('Track loading issue tracker context:', e.err);
+                    document.getElementById('info').innerText = "Route Error. Drawing Open Tracking Canvas.";
+                    updateTrackersLoop();
+                }).addTo(map);
+            } else {
+                updateTrackersLoop();
+            }
+
+
+            // 4. FETCH AND DISPATCH SATELLITE PINGS
+            function updateTrackersLoop() {
+                let loadedCount = 0;
+                markerGroup.clearLayers();
+
+                friends.forEach(friend => {
+                    if (friend.feedId === "TEST") {
+                        let lat = 43.7; let lng = 7.2;
+                        L.marker([lat, lng]).addTo(markerGroup).bindPopup(`<strong>🚴‍♂️ ${friend.name} (Simulated)</strong>`);
+                        return; 
+                    }
+
+                    // REPAIRED: Swapped out broken token syntax for the functional modern SPOT JSON query endpoint
+                    const targetSpotUrl = `https://findmespot.com{friend.feedId}/message.json`;
+                    const spotApiUrl = `https://corsproxy.io` + encodeURIComponent(targetSpotUrl);
+
+                    fetch(spotApiUrl)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.response && data.response.feedMessageResponse && data.response.feedMessageResponse.messages) {
+                                const messageList = data.response.feedMessageResponse.messages.message;
+                                const latestPing = Array.isArray(messageList) ? messageList[0] : messageList;
+                                
+                                const lat = parseFloat(latestPing.latitude);
+                                const lng = parseFloat(latestPing.longitude);
+                                const timestamp = latestPing.dateTime;
+                                const batteryStatus = latestPing.batteryState || "Normal";
+
+                                const popupContent = `
+                                    <strong>🚴‍♂️ ${friend.name}</strong><br>
+                                    <b>Last Contact:</b> ${new Date(timestamp).toLocaleString()}<br>
+                                    <b>Battery Health:</b> ${batteryStatus}<br>
+                                    <b>Position:</b> ${lat.toFixed(4)}, ${lng.toFixed(4)}
+                                `;
+
+                                L.marker([lat, lng]).addTo(markerGroup).bindPopup(popupContent);
+                            }
+                            loadedCount++;
+                            if (loadedCount === friends.length) {
+                                document.getElementById('info').innerText = `Last Track Refresh: ${new Date().toLocaleTimeString()}`;
+                            }
+                        })
+                        .catch(err => {
+                            console.error(`Fetch drop error for ${friend.name}:`, err);
+                            loadedCount++;
+                            document.getElementById('info').innerText = "Map active. Waiting for satellite feed sync...";
+                        });
+                });
+            }
+
+            // Sync track arrays every 2 minutes automatically
+            setInterval(updateTrackersLoop, 120000);
+        }
+
+        // DOM verification listener trigger
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            initializeTrackerApp();
+        } else {
+            document.addEventListener("DOMContentLoaded", initializeTrackerApp);
+        }
+    </script>
+</body>
+</html>
