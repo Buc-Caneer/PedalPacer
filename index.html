@@ -1,0 +1,187 @@
+html<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Adventure Tracker</title>
+    
+    <!-- REPLACED: Moved from cloudflare to official UNPKG styling node -->
+    <link rel="stylesheet" href="https://unpkg.com" />
+    
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #f5f5f5;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .info-box {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 13px;
+            font-weight: bold;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #222;
+            border-left: 4px solid #ff0055;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+    <div class="info-box" id="info">Initialising Map Framework...</div>
+
+    <!-- REPLACED: Removed Cloudflare entirely. Using pure, unblocked Google/UNPKG mirrors -->
+    <script src="https://unpkg.com"></script>
+
+    <script>
+        function initializeTrackerApp() {
+            if (typeof L === 'undefined') {
+                setTimeout(initializeTrackerApp, 100);
+                return;
+            }
+
+            document.getElementById('info').innerText = "Map Active. Loading Course Path...";
+
+            // 1. INITIALISE MAP ENGINE
+            const map = L.map('map').setView([43.7, 7.2], 8); 
+
+            // Using standard OpenStreetMap vector tiles instead of topographic layers to keep it fast
+            const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            const markerGroup = L.layerGroup().addTo(map);
+
+            // 2. DATA INFRASTRUCTURE
+            const rawGpxUrl = 'https://githubusercontent.com';
+            
+            // Using a resilient public scraper fallback proxy (AllOrigins) instead of CorsProxy
+            const geoJsonPipelineUrl = 'https://allorigins.win' + encodeURIComponent(rawGpxUrl);
+
+            const friends = [
+                { name: "Niven", feedId: "0ZyT6VBgHg6hQ80sOUumc1t2Q2oiG9zXh" }
+            ];
+
+            // 3. PARSE GPX MANUALLY (NO CORRUPTIBLE EXTERNAL FILES)
+            fetch(geoJsonPipelineUrl)
+                .then(response => {
+                    if (response.ok) return response.json();
+                    throw new Error('Network line error.');
+                })
+                .then(data => {
+                    const parser = new DOMParser();
+                    const xml = parser.parseFromString(data.contents, "text/xml");
+                    const trkpts = xml.getElementsByTagName("trkpt");
+                    
+                    const coordinates = [];
+                    for (let i = 0; i < trkpts.length; i++) {
+                        let lat = parseFloat(trkpts[i].getAttribute("lat"));
+                        let lon = parseFloat(trkpts[i].getAttribute("lon"));
+                        if (!isNaN(lat) && !isNaN(lon)) {
+                            coordinates.push([lat, lon]);
+                        }
+                    }
+
+                    if (coordinates.length > 0) {
+                        const polyline = L.polyline(coordinates, {
+                            color: '#ff0055', 
+                            weight: 5, 
+                            opacity: 0.9
+                        }).addTo(map);
+                        
+                        map.fitBounds(polyline.getBounds());
+                        document.getElementById('info').innerText = "Course Mapped. Syncing Satellite Feed...";
+                    } else {
+                        document.getElementById('info').innerText = "GPX file empty. Loading default base map.";
+                    }
+                    updateTrackersLoop();
+                })
+                .catch(err => {
+                    console.error('GPX parse crash:', err);
+                    document.getElementById('info').innerText = "Route Error. Mapping tracking points.";
+                    updateTrackersLoop();
+                });
+
+            // 4. FETCH LIVE SPOT MESSAGES VIA PRODUCTION CHANNELS
+            function updateTrackersLoop() {
+                let loadedCount = 0;
+                markerGroup.clearLayers();
+
+                friends.forEach(friend => {
+                    // Production-verified public feed REST endpoints
+                    const targetSpotUrl = `https://findmespot.com{friend.feedId}/message.json`;
+                    const spotApiUrl = `https://allorigins.win` + encodeURIComponent(targetSpotUrl);
+
+                    fetch(spotApiUrl)
+                        .then(response => {
+                            if (response.ok) return response.json();
+                            throw new Error('Satellite node offline.');
+                        })
+                        .then(wrapper => {
+                            const data = JSON.parse(wrapper.contents);
+                            
+                            if (data.response && data.response.feedMessageResponse && data.response.feedMessageResponse.messages) {
+                                const messageList = data.response.feedMessageResponse.messages.message;
+                                
+                                // Clean array assignments
+                                const latestPing = Array.isArray(messageList) ? messageList[0] : messageList;
+                                
+                                const lat = parseFloat(latestPing.latitude);
+                                const lng = parseFloat(latestPing.longitude);
+                                const timestamp = latestPing.dateTime;
+                                const batteryStatus = latestPing.batteryState || "Normal";
+
+                                const popupContent = `
+                                    <strong>🚴‍♂️ ${friend.name}</strong><br>
+                                    <b>Last Connection:</b> ${new Date(timestamp).toLocaleString()}<br>
+                                    <b>Battery:</b> ${batteryStatus}<br>
+                                    <b>Coordinates:</b> ${lat.toFixed(4)}, ${lng.toFixed(4)}
+                                `;
+
+                                L.marker([lat, lng]).addTo(markerGroup).bindPopup(popupContent);
+                            }
+                            loadedCount++;
+                            if (loadedCount === friends.length) {
+                                document.getElementById('info').innerText = `Last Refreshed: ${new Date().toLocaleTimeString()}`;
+                            }
+                        })
+                        .catch(err => {
+                            console.error(`Tracker endpoint block for ${friend.name}:`, err);
+                            loadedCount++;
+                            document.getElementById('info').innerText = "Map Active. Waiting for SPOT server ping...";
+                        });
+                });
+            }
+
+            // Keep connections looping smoothly every 2 minutes
+            setInterval(updateTrackersLoop, 120000);
+        }
+
+        // DOM Loader
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            initializeTrackerApp();
+        } else {
+            document.addEventListener("DOMContentLoaded", initializeTrackerApp);
+        }
+    </script>
+</body>
+</html>
