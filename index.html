@@ -1,0 +1,161 @@
+html<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Adventure Tracker</title>
+    
+    <!-- FIXED: Added full Leaflet CSS URL -->
+    <link rel="stylesheet" href="https://unpkg.com" />
+    
+    <style>
+        html, body, #map {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: sans-serif;
+        }
+        .info-box {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+    <div class="info-box" id="info">Loading tracker data...</div>
+
+    <!-- FIXED: Added full Leaflet & Plugin JS URLs -->
+    <script src="https://unpkg.com"></script>
+    <script src="https://cloudflare.com"></script>
+
+    <script>
+        // 1. INITIALISE MAP & BASE LAYERS
+        const map = L.map('map').setView([-29.0, 25.0], 6); 
+
+        const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            maxZoom: 17,
+            attribution: 'Map data: &copy; OpenStreetMap contributors | Style: OpenTopoMap'
+        }).addTo(map);
+
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        });
+
+        const baseMaps = {
+            "Topographic Map": topoLayer,
+            "Standard Road Map": osmLayer
+        };
+        L.control.layers(baseMaps).addTo(map);
+
+        // Group to keep track of participant markers so they update cleanly instead of duplicating
+        const markerGroup = L.layerGroup().addTo(map);
+
+
+        // 2. CONFIGURATION: ADD YOUR ROUTE AND FRIENDS HERE
+        // Paste your raw GitHub GPX file link here once uploaded
+        const gpxFileUrl = 'https://raw.githubusercontent.com/Buc-Caneer/PedalPacer/refs/heads/main/Zengen2NiceNe.gpx'; 
+
+        // Enter your friends' real SPOT Feed IDs here. 
+        // LEAVE THEM AS "TEST" to see the simulated live dots running right now.
+        const friends = [
+            { name: "Niven", 0ZyT6VBgHg6hQ80sOUumc1t2Q2oiG9zXh: "TEST" }
+            ];
+
+
+        // 3. LOAD THE GPX ROUTE LINE
+        if (gpxFileUrl && gpxFileUrl.trim() !== '') {
+            new L.GPX(gpxFileUrl, {
+                async: true,
+                marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null },
+                polyline_options: { color: '#ff0055', weight: 4, opacity: 0.8 }
+            }).on('loaded', function(e) {
+                map.fitBounds(e.target.getBounds());
+            }).addTo(map);
+        }
+
+
+        // 4. FETCH AND TRACK SPOT DEVICES
+        function updateTrackers() {
+            let loadedCount = 0;
+            
+            // Clear old markers before drawing new positions
+            markerGroup.clearLayers();
+
+            friends.forEach(friend => {
+                
+                // FALLBACK MOCK DATA: Simulates tracking if Feed ID is set to "TEST"
+                if (friend.feedId === "TEST") {
+                    let lat = -29.0 + (Math.random() - 0.5) * 2;
+                    let lng = 25.0 + (Math.random() - 0.5) * 2;
+                    
+                    const popupContent = `
+                        <strong>🚴‍♂️ ${friend.name} (Simulated)</strong><br>
+                        <b>Time:</b> ${new Date().toLocaleString()}<br>
+                        <b>Battery:</b> GOOD<br>
+                        <b>Coordinates:</b> ${lat.toFixed(4)}, ${lng.toFixed(4)}
+                    `;
+                    L.marker([lat, lng]).addTo(markerGroup).bindPopup(popupContent);
+                    
+                    loadedCount++;
+                    if (loadedCount === friends.length) {
+                        document.getElementById('info').innerText = `Last updated: ${new Date().toLocaleTimeString()} (Demo Mode)`;
+                    }
+                    return; 
+                }
+
+                // FIXED: Added Corsproxy bypass and corrected ${friend.feedId} template literal string syntax
+                const spotApiUrl = `https://corsproxy.io{friend.feedId}/latest.json`;
+
+                fetch(spotApiUrl)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.response && data.response.feedMessageResponse && data.response.feedMessageResponse.messages) {
+                            const messageData = data.response.feedMessageResponse.messages.message;
+                            const latestPing = Array.isArray(messageData) ? messageData[0] : messageData;
+                            
+                            const lat = parseFloat(latestPing.latitude);
+                            const lng = parseFloat(latestPing.longitude);
+                            const timestamp = latestPing.dateTime;
+                            const batteryStatus = latestPing.batteryState || "Unknown";
+
+                            const popupContent = `
+                                <strong>🚴‍♂️ ${friend.name}</strong><br>
+                                <b>Time:</b> ${new Date(timestamp).toLocaleString()}<br>
+                                <b>Battery:</b> ${batteryStatus}<br>
+                                <b>Coordinates:</b> ${lat.toFixed(4)}, ${lng.toFixed(4)}
+                            `;
+
+                            L.marker([lat, lng]).addTo(markerGroup).bindPopup(popupContent);
+                        }
+                        loadedCount++;
+                        if (loadedCount === friends.length) {
+                            document.getElementById('info').innerText = `Last updated: ${new Date().toLocaleTimeString()}`;
+                        }
+                    })
+                    .catch(err => {
+                        console.error(`Could not fetch data for ${friend.name}:`, err);
+                        loadedCount++;
+                        document.getElementById('info').innerText = "Error loading some tracking data.";
+                    });
+            });
+        }
+
+        // Run the tracker update immediately when the page opens
+        updateTrackers();
+
+        // Auto-refresh the map markers every 2 minutes
+        setInterval(updateTrackers, 120000);
+
+    </script>
+</body>
+</html>
